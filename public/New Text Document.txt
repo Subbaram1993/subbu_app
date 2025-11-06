@@ -1,0 +1,104 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
+const ngrok = require('ngrok');  // Add ngrok
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static files from the 'public' directory
+
+// Path to the JSON file
+const userFilePath = path.join(__dirname, 'users.json');
+
+// Function to read users from the JSON file
+const readUsersFromFile = () => {
+    if (!fs.existsSync(userFilePath)) {
+        return [];
+    }
+    const data = fs.readFileSync(userFilePath);
+    return JSON.parse(data);
+};
+
+// Function to write users to the JSON file
+const writeUsersToFile = (users) => {
+    fs.writeFileSync(userFilePath, JSON.stringify(users, null, 2));
+};
+
+// Home route (serves index.html)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html')); // Adjust path to your index.html
+});
+
+// Signup route
+app.post('/signup', (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).send('Username and password are required');
+    }
+
+    const users = readUsersFromFile();
+    const existingUser = users.find(user => user.username === username);
+    
+    if (existingUser) {
+        return res.status(400).send('User already exists');
+    }
+
+    bcrypt.hash(password, 10, (err, hash) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).send('Error hashing password');
+        }
+
+        const newUser = { username, password: hash };
+        users.push(newUser);
+        writeUsersToFile(users);
+
+        res.status(201).send('User created');
+    });
+});
+
+// Login route
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).send('Username and password are required');
+    }
+
+    const users = readUsersFromFile();
+    const user = users.find(user => user.username === username);
+
+    if (!user) {
+        return res.status(401).send('User not found');
+    }
+
+    bcrypt.compare(password, user.password, (err, isMatch) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).send('Error comparing passwords');
+        }
+
+        if (!isMatch) {
+            return res.status(401).send('Invalid password');
+        }
+
+        res.send('Login successful');
+    });
+});
+
+// Start the server
+app.listen(PORT, '0.0.0.0', async () => {
+    try {
+        // Start ngrok and get the public URL
+        const url = await ngrok.connect(PORT);  // Create a tunnel to your localhost
+        console.log(`Access your app via: ${url}`);
+    } catch (err) {
+        console.error('Error starting ngrok:', err);
+    }
+});
