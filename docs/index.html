@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Page</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        function loadPage(page) {
+            const restrictedPages = ['personal-projects.html', 'professional.html', 'resume.html'];
+            const isLoggedIn = localStorage.getItem('isAuthenticated');
+
+            if (restrictedPages.includes(page) && !isLoggedIn) {
+                alert('Please log in to access this page.');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            fetch(page)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById('main-content').innerHTML = data;
+                })
+                .catch(err => console.error('Error loading page:', err));
+        }
+
+        function logout() {
+            localStorage.removeItem('isAuthenticated');
+            alert('Logged out successfully.');
+            window.location.href = 'index.html';
+        }
+
+        window.onload = () => {
+            const isLoggedIn = localStorage.getItem('isAuthenticated');
+            if (isLoggedIn) {
+                document.getElementById('logout-btn').style.display = 'block';
+            }
+        };
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Banner with Logo -->
+        <header class="banner">
+            <div class="info">
+                <img src="images/Logo.webp" alt="Logo" class="logo-img">
+                <h1>Subbaramaiah Chevuru</h1>
+                <p>Technical Lead &ndash; HCLTech</p>
+            </div>
+        </header>
+
+        <!-- Navigation Menu -->
+        <nav class="nav">
+            <a href="index.html">Home</a>
+            <a href="#about" onclick="loadPage('about.html')">About</a>
+            <a href="#personal" onclick="loadPage('personal.html')">Personal</a>
+            <a href="#professional" onclick="loadPage('professional.html')">Professional</a>
+            <a href="#resume" onclick="loadPage('resumesecured.html')">Resume</a>
+            <a href="#projects" onclick="loadPage('personal-projects.html')">Projects</a>
+            <a href="login.html">Login</a>
+            <a href="signup.html">Signup</a>
+            <button id="logout-btn" style="display:none;" onclick="logout()">Logout</button>
+        </nav>
+
+        <!-- Main Content -->
+        <div id="main-content">
+            <h2>Welcome to the Profile Page</h2>
+            <div class="scroll-container">
+                <p class="moving-text">This is the home page. You can access public information here.</p>
+            </div>
+
+            <section id="personal-info">
+                <h2>Personal Information</h2>
+                <p><strong>Location:</strong> Nellore, Andhra Pradesh</p>
+                <p><strong>Interests:</strong> Listening to Music.</p>
+                <p><strong>E-mail:</strong> 
+                    <a href="mailto:ram.subaram@gmail.com" style="text-decoration: none; color: transparent;">
+                        ram.subaram@gmail.com
+                    </a>
+                </p>
+            </section>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2025 Subbaramaiah Chevuru &reg; &trade;</p>
+        </footer>
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume - Subbaramaiah Chevuru</title>
+    <link rel="stylesheet" href="style.css"> <!-- Link to your CSS file -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0; /* Remove extra margin */
+            background-color: #87cefa; /* Light blue background */
+            text-align: center; /* Centers the content */
+        }
+
+        /* Resume Header */
+        .resume-header {
+            text-align: center;
+            padding: 10px 0; /* Reduce space above & below */
+            max-width: 1000px; /* Matches container width */
+            margin: 0 auto; /* Aligns properly with the banner */
+        }
+
+        /* Image-filled Text for Resume Title */
+        .resume-header h1 {
+            font-size: 2.2em; /* Balanced size */
+            font-weight: bold;
+            text-transform: uppercase;
+            background: url('images/banner.webp') no-repeat center center;
+            background-size: cover;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+            border-bottom: 2px solid #0073e6; /* Keeps alignment with h2 */
+            padding-bottom: 5px; /* Reduced padding */
+            margin: 5px 0; /* Minimized space around */
+        }
+
+        /* Resume Section Alignment */
+        #resume-viewer {
+            background-color: #fff;
+            margin: 10px auto;
+            padding: 20px;
+            max-width: 1000px;
+            border-radius: 8px;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: left;  /* Ensures text starts from left */
+        }
+
+        h2 {
+            font-size: 1.8em;
+            border-bottom: 2px solid #0073e6;
+            padding-bottom: 10px;
+            color: #0073e6;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 10px;
+            padding: 15px;
+            background-color: #0073e6;
+            color: #fff;
+        }
+
+        footer a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Resume Header with Image-filled Text -->
+    <div class="resume-header">
+        <h1>Resume</h1>
+    </div>
+
+    <!-- Resume Section -->
+    <section id="resume-viewer">
+        <h2>View My Resume</h2>
+        <p>You can view or download the resume using the link below.</p>
+
+        <!-- Embedded PDF Viewer -->
+        <iframe src="https://docs.google.com/document/d/1Nn5CZOMlNmn2newMkfOxv6o9VErZ8bUP/preview" width="100%" height="600px" title="Subbaramaiah Chevuru Resume">
+            <p>Your browser does not support iframes. You can download the resume from the link below.</p>
+        </iframe>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <p><a href="\">Back to Profile</a></p>
+    </footer>
+
+</body>
+</html>

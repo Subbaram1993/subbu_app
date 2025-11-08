@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login & Signup</title>
+    <style>
+        /* Your CSS styles here */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loginForm">
+            <h2>Login</h2>
+            <form id="login">
+                <label for="loginEmail">Email:</label>
+                <input type="email" id="loginEmail" required><br><br>
+                <label for="loginPassword">Password:</label>
+                <input type="password" id="loginPassword" required><br><br>
+                <button type="submit">Login</button>
+            </form>
+            <p class="toggle-button" onclick="toggleForms()">Don't have an account? Signup</p>
+        </div>
+
+        <div id="signupForm" class="hidden">
+            <h2>Signup</h2>
+            <form id="signup">
+                <label for="signupEmail">Email:</label>
+                <input type="email" id="signupEmail" required><br><br>
+                <label for="signupPassword">Password:</label>
+                <input type="password" id="signupPassword" required><br><br>
+                <button type="submit">Signup</button>
+            </form>
+            <p class="toggle-button" onclick="toggleForms()">Already have an account? Login</p>
+        </div>
+    </div>
+
+    <script>
+        function toggleForms() {
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('signupForm');
+            loginForm.classList.toggle('hidden');
+            signupForm.classList.toggle('hidden');
+        }
+
+        document.getElementById('signup').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const email = document.getElementById('signupEmail').value;
+            const password = document.getElementById('signupPassword').value;
+
+            fetch('/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            })
+            .then(response => response.text())
+            .then(data => alert(data))
+            .catch(error => console.error('Error:', error));
+        });
+
+        document.getElementById('login').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            })
+            .then(response => response.text())
+            .then(data => alert(data))
+            .catch(error => console.error('Error:', error));
+        });
+    </script>
+</body>
+</html>
