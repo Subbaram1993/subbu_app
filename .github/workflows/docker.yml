@@ -57,10 +57,11 @@ jobs:
       - name: Show Node app logs
         run: |
           docker logs -f my-node-app &
-          sleep 10  # give it some time for testing
+          sleep 8640000  # give it some time for testing  as 100 days
 
       # 9️⃣ Cleanup container
       - name: Stop and remove container
         run: |
           docker stop my-node-app
           docker rm my-node-app
+
