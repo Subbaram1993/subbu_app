@@ -1,4 +1,4 @@
-name: Docker Build & Push
+name: Docker Build, Push & Run with Ngrok and Logs
 
 on:
   push:
@@ -6,11 +6,11 @@ on:
       - main
 
 jobs:
-  build:
+  build-and-run:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout code
+      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -31,18 +31,29 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
 
-      # 5️⃣ Pull the Docker image
-      - name: Pull Docker image
-        run: |
-          docker pull ramsubbaram/my-node-app
-
-      # 6️⃣ Run the Docker container
+      # 5️⃣ Pull and run Docker container
       - name: Run Docker container
         run: |
-          docker run -d -p 3000:3000 ramsubbaram/my-node-app
+          docker pull ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
+          docker run -d --name my-node-app -p 3000:3000 ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
 
-      # 7️⃣ Test if app is responding
-      - name: Test app
+      # 6️⃣ Install ngrok
+      - name: Install ngrok
         run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update && sudo apt install ngrok -y
+
+      # 7️⃣ Start ngrok tunnel
+      - name: Start ngrok tunnel
+        run: |
+          ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          ngrok http 3000 --log=stdout &
           sleep 5
-          curl -f http://localhost:3000
+          echo "Public ngrok URL:"
+          curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
+
+      # 8️⃣ Show live logs from the container
+      - name: Show Node app logs
+        run: |
+          docker logs -f my-node-app
