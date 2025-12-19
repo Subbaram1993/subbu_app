@@ -1,4 +1,4 @@
-name: Docker Build, Push & Run with Ngrok and Logs
+name: Docker Build, Push & Run with Ngrok, Logs & Cleanup
 
 on:
   push:
@@ -56,4 +56,11 @@ jobs:
       # 8️⃣ Show live logs from the container
       - name: Show Node app logs
         run: |
-          docker logs -f my-node-app
+          docker logs -f my-node-app &
+          sleep 10  # give it some time for testing
+
+      # 9️⃣ Cleanup container
+      - name: Stop and remove container
+        run: |
+          docker stop my-node-app
+          docker rm my-node-app
