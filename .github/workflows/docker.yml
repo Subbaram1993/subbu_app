@@ -1,4 +1,4 @@
-name: Docker Build, Push & Run with Ngrok, Logs & Cleanup
+name: Docker Build, Push & Run with Ngrok (3 Hours)
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
+    timeout-minutes: 180   # ⏱️ 3 hours max
 
     steps:
       # 1️⃣ Checkout repository
@@ -31,18 +32,20 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
 
-      # 5️⃣ Pull and run Docker container
+      # 5️⃣ Run Docker container
       - name: Run Docker container
         run: |
-          docker pull ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
-          docker run -d --name my-node-app -p 3000:3000 ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
+          docker run -d --name my-node-app -p 3000:3000 \
+            ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
 
       # 6️⃣ Install ngrok
       - name: Install ngrok
         run: |
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update && sudo apt install ngrok -y
+          sudo apt update
+          sudo apt install ngrok -y
+          sudo apt install jq -y
 
       # 7️⃣ Start ngrok tunnel
       - name: Start ngrok tunnel
@@ -53,20 +56,16 @@ jobs:
           echo "Public ngrok URL:"
           curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
 
-      # 8️⃣ Show live logs from the container
-      - name: Show Node app logs
+      # 8️⃣ Show logs and keep alive for 3 hours
+      - name: Run for 3 hours
         run: |
           docker logs -f my-node-app &
-          
-          # give it some time for testing  as 100 days
-          while true; do
-            echo "Sleeping for 3hours....."
-            sleep 10800 #3hours = 3 * 60 * 60
-          done
+          echo "⏳ Running for 3 hours..."
+          sleep 10800   # 3 hours
 
-      # 9️⃣ Cleanup container
-      - name: Stop and remove container
+      # 9️⃣ Cleanup (always runs)
+      - name: Cleanup container
+        if: always()
         run: |
-          docker stop my-node-app
-          docker rm my-node-app
-
+          docker stop my-node-app || true
+          docker rm my-node-app || true
