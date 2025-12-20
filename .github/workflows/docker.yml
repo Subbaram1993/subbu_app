@@ -57,7 +57,12 @@ jobs:
       - name: Show Node app logs
         run: |
           docker logs -f my-node-app &
-          sleep 8640000  # give it some time for testing  as 100 days
+          
+          # give it some time for testing  as 100 days
+          while true; do
+            echo "Sleeping for 3hours....."
+            sleep 10800 #3hours = 3 * 60 * 60
+          done
 
       # 9️⃣ Cleanup container
       - name: Stop and remove container
