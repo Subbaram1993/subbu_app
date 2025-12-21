@@ -22,10 +22,10 @@ jobs:
       # 2️⃣ Ensure build_number.json exists & read version
       - name: Create or Read Build JSON
         run: |
-          mkdir -p .github/build_numbers
+          mkdir -p .github/pages/ngrok_pages.json
 
           if [ ! -f "${PAGES_JSON_PATH}" ]; then
-            echo "📄 build_number.json not found. Creating default..."
+            echo "📄 ngrok_pages.json not found. Creating default..."
             cat <<EOF > ${PAGES_JSON_PATH}
             {
              "version": "v0.1.0",
