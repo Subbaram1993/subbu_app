@@ -19,10 +19,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1️⃣ Trigger Jenkins Job with CSRF crumb
+      # 2️⃣ Trigger Jenkins Job
       - name: Trigger Jenkins Job
         id: trigger_jenkins
         run: |
@@ -37,40 +38,55 @@ jobs:
             echo "❌ Failed to fetch Jenkins crumb"
             exit 1
           fi
-
           echo "✅ Jenkins crumb acquired"
 
           echo "🚀 Triggering Jenkins job..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
             -H "Jenkins-Crumb: $CRUMB" \
-            "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/buildWithParameters")
+            "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build")
 
           if [ "$STATUS" != "201" ]; then
             echo "❌ Jenkins trigger failed (HTTP $STATUS)"
             exit 1
           fi
-
           echo "✅ Jenkins triggered successfully"
 
-      # 2️⃣ Get Jenkins build number (after trigger success)
-      - name: Get Jenkins Build Number
+      # 3️⃣ Wait for Jenkins build completion and get build number
+      - name: Wait for Jenkins Build Completion
         run: |
           set -euo pipefail
 
-          BUILD_NUMBER=$(curl -s \
-            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-            "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/buildNumber")
-
-          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "❌ Invalid Jenkins build number"
-            exit 1
-          fi
-
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "⏳ Waiting for Jenkins build to start..."
+          while true; do
+            BUILD_NUMBER=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+              "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/api/json" \
+              | jq -r '.number')
+            if [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+              break
+            fi
+            sleep 2
+          done
           echo "🔢 Jenkins build number: $BUILD_NUMBER"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
-      # 3️⃣ Determine version using your logic
+          echo "⏳ Waiting for build $BUILD_NUMBER to finish..."
+          while true; do
+            STATUS=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+              "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/$BUILD_NUMBER/api/json" \
+              | jq -r '.result')
+            if [ "$STATUS" != "null" ]; then
+              echo "✅ Build finished with status: $STATUS"
+              if [ "$STATUS" != "SUCCESS" ]; then
+                echo "❌ Jenkins build failed"
+                exit 1
+              fi
+              break
+            fi
+            sleep 5
+          done
+
+      # 4️⃣ Determine version
       - name: Determine Version
         run: |
           set -euo pipefail
@@ -84,7 +100,7 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "📦 Determined version: $VERSION"
 
-      # 4️⃣ Update JSON (preserve ngrok URL)
+      # 5️⃣ Update JSON (preserve existing ngrok URL)
       - name: Update version in JSON
         run: |
           set -euo pipefail
@@ -106,7 +122,7 @@ jobs:
 
           echo "📝 JSON updated (version updated, ngrok URL preserved)"
 
-      # 5️⃣ Commit JSON
+      # 6️⃣ Commit JSON back to GitHub
       - name: Commit JSON
         run: |
           set -euo pipefail
