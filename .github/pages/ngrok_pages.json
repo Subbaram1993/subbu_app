@@ -1,1 +1,5 @@
-{ "ngrok_url": "https://dce92ba249bd.ngrok-free.app" }
+{
+  "version": "latest",
+  "ngrok_url": "https://8bacb8c893ac.ngrok-free.app",
+  "last_updated": "2025-12-21T10:55:08Z"
+}
