@@ -15,84 +15,61 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout
+      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Get Jenkins Build Number (Robust)
+      # 2️⃣ Get Jenkins Build Number
       - name: Get Jenkins Build Number
         run: |
           set -e
-
           echo "🔍 Fetching Jenkins build number..."
-
           API_URL="${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/api/json"
-
           RESPONSE=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" "$API_URL")
-
-          # Attempt to get lastSuccessfulBuild number first
           BUILD_NUMBER=$(echo "$RESPONSE" | jq -r '.lastSuccessfulBuild.number // empty')
-
-          # Fallback to lastBuild if lastSuccessfulBuild not available
           if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "⚠️ lastSuccessfulBuild not available, trying lastBuild..."
-            BUILD_NUMBER=$(echo "$RESPONSE" | jq -r '.lastBuild.number // empty')
+            BUILD_NUMBER=$(echo "$RESPONSE" | jq -r '.lastBuild.number // 0')
           fi
-
-          # If still invalid, fallback to 0 (job never ran)
-          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "⚠️ Jenkins job has no builds yet, setting BUILD_NUMBER=0"
-            BUILD_NUMBER=0
-          fi
-
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
           echo "✅ Jenkins Build Number: $BUILD_NUMBER"
 
-      # 3️⃣ Determine Version from Build Number
+      # 3️⃣ Determine Version
       - name: Determine Version
         run: |
           set -e
-
           PATCH=$((BUILD_NUMBER % 10))
           MINOR=$(( (BUILD_NUMBER / 10) % 6 ))
           MAJOR=$(( BUILD_NUMBER / 60 ))
-
           VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "📦 Determined Version: $VERSION"
 
-      # 4️⃣ Save Version to JSON
+      # 4️⃣ Save initial JSON (with placeholder ngrok URL)
       - name: Save Version to ngrok_pages.json
         run: |
           set -e
           mkdir -p .github/pages
-
+          NGROK_URL="https://8ac9dbe6fad4.ngrok-free.app"
           jq -n \
             --arg version "$VERSION" \
+            --arg ngrok_url "$NGROK_URL" \
             --arg last_updated "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-            '{version: $version, last_updated: $last_updated}' \
+            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}' \
             > "${PAGES_JSON_PATH}"
+          echo "📝 ngrok_pages.json initialized"
 
-          echo "📝 ngrok_pages.json updated"
-
-      # 5️⃣ Commit Version (only if changed, skip CI)
+      # 5️⃣ Commit JSON if changed
       - name: Commit Version
         run: |
-          set -e
-
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-
           git add "${PAGES_JSON_PATH}"
-
           if git diff --cached --quiet; then
             echo "ℹ️ No changes to commit"
           else
-            git commit -m "Version updated to ${VERSION} [skip ci]"
+            git commit -m "Version initialized to ${VERSION} [skip ci]"
             git push
             echo "✅ Version committed"
-          fi
 
       # 6️⃣ Docker Login
       - name: Login to Docker Hub
@@ -125,4 +102,4 @@ jobs:
       - name: Finish
         run: |
           echo "✅ Final Version: $VERSION"
-          echo "🚀 Jenkins job 'subbu_app' triggered"
+          echo "🚀 Jenkins job '${{ env.JENKINS_JOB_NAME }}' triggered"
