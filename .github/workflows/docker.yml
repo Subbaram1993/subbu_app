@@ -9,6 +9,7 @@ env:
   IMAGE_NAME: my-node-app
   PAGES_JSON_PATH: .github/pages/ngrok_pages.json
   JENKINS_JOB_NAME: subbu_app
+  NGROK_URL: https://8ac9dbe6fad4.ngrok-free.app
 
 jobs:
   build-and-trigger:
@@ -20,54 +21,66 @@ jobs:
 
       - name: Get Jenkins Build Number
         run: |
-          set -e
+          set -euo pipefail
           echo "🔍 Fetching last build number..."
+
           BUILD_NUMBER=$(curl -s --connect-timeout 10 --max-time 15 \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
             "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/buildNumber" || true)
+
           if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
             echo "⚠️ Jenkins build number not available, using 0"
             BUILD_NUMBER=0
           fi
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "✅ Jenkins Build Number: $BUILD_NUMBER"
 
       - name: Determine Version
         run: |
-          set -e
+          set -euo pipefail
+
           PATCH=$((BUILD_NUMBER % 10))
-          MINOR=$(( (BUILD_NUMBER / 10) % 6 ))
-          MAJOR=$(( BUILD_NUMBER / 60 ))
+          MINOR=$(((BUILD_NUMBER / 10) % 6))
+          MAJOR=$((BUILD_NUMBER / 60))
+
           VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "📦 Determined Version: $VERSION"
 
       - name: Save initial JSON
         run: |
-          set -e
+          set -euo pipefail
+
           mkdir -p .github/pages
-          NGROK_URL="https://8ac9dbe6fad4.ngrok-free.app"
           LAST_UPDATED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
           JSON_CONTENT=$(jq -n \
             --arg version "$VERSION" \
             --arg ngrok_url "$NGROK_URL" \
             --arg last_updated "$LAST_UPDATED" \
             '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}')
+
           echo "$JSON_CONTENT" > "${PAGES_JSON_PATH}"
           echo "📝 ngrok_pages.json initialized"
 
       - name: Commit Version
         run: |
-          set -e
+          set -euo pipefail
+
           git config user.name "${{ github.actor }}"
           git config user.email "${{ secrets.GIT_EMAIL }}"
+
           git add "${PAGES_JSON_PATH}"
+
           if git diff --cached --quiet; then
             echo "ℹ️ No changes to commit"
           else
             git commit -m "Version initialized to ${VERSION} [skip ci]"
             git push
             echo "✅ Version committed"
+          fi
 
       - name: Docker Login
         uses: docker/login-action@v3
@@ -77,23 +90,33 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} \
-                       -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
+          set -euo pipefail
+
+          docker build \
+            -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} \
+            -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
 
       - name: Push Docker Images
         run: |
+          set -euo pipefail
+
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Trigger Jenkins Job
         run: |
+          set -euo pipefail
+
           curl -X POST \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
             "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build"
+
           echo "✅ Jenkins job triggered"
 
       - name: Finish
         run: |
+          set -euo pipefail
+
           echo "🚀 Deployment completed successfully"
-          echo "Version: $VERSION"
-          echo "ngrok URL: $NGROK_URL"
+          echo "Version: ${VERSION}"
+          echo "ngrok URL: ${NGROK_URL}"
