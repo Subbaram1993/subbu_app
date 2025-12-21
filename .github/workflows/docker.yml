@@ -19,10 +19,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Get Jenkins Build Number
-      - name: Get Latest Jenkins Build Number
+      # 2️⃣ Get Jenkins Build Number (Safe with fallback)
+      - name: Get Jenkins Build Number
         run: |
           set -e
+
+          echo "🔍 Fetching Jenkins lastSuccessfulBuild number..."
 
           BUILD_NUMBER=$(curl -s \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
@@ -30,14 +32,23 @@ jobs:
             | jq -r '.number')
 
           if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "❌ Invalid Jenkins build number"
+            echo "⚠️ lastSuccessfulBuild not available, trying lastBuild..."
+
+            BUILD_NUMBER=$(curl -s \
+              -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+              "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/api/json" \
+              | jq -r '.number')
+          fi
+
+          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "❌ Unable to retrieve a valid Jenkins build number"
             exit 1
           fi
 
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
           echo "✅ Jenkins Build Number: $BUILD_NUMBER"
 
-      # 3️⃣ Determine Version
+      # 3️⃣ Determine Version from Build Number
       - name: Determine Version
         run: |
           set -e
@@ -49,12 +60,13 @@ jobs:
           VERSION="v${MAJOR}.${MINOR}.${PATCH}"
 
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "📦 Version: $VERSION"
+          echo "📦 Determined Version: $VERSION"
 
-      # 4️⃣ Save version to JSON
+      # 4️⃣ Save Version to JSON
       - name: Save Version to ngrok_pages.json
         run: |
           set -e
+
           mkdir -p .github/pages
 
           jq -n \
@@ -63,15 +75,25 @@ jobs:
             '{version: $version, last_updated: $last_updated}' \
             > "${PAGES_JSON_PATH}"
 
-      # 5️⃣ Commit version (skip CI)
+          echo "📝 ngrok_pages.json updated"
+
+      # 5️⃣ Commit Version (only if changed, skip CI)
       - name: Commit Version
         run: |
+          set -e
+
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
 
           git add "${PAGES_JSON_PATH}"
-          git commit -m "Version updated to ${VERSION} [skip ci]"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "ℹ️ No changes to commit"
+          else
+            git commit -m "Version updated to ${VERSION} [skip ci]"
+            git push
+            echo "✅ Version committed"
+          fi
 
       # 6️⃣ Docker Login
       - name: Login to Docker Hub
@@ -93,7 +115,7 @@ jobs:
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
-      # 9️⃣ Trigger Jenkins
+      # 9️⃣ Trigger Jenkins Job
       - name: Trigger Jenkins Job
         run: |
           curl -X POST \
@@ -103,5 +125,5 @@ jobs:
       # 🔟 Finish
       - name: Finish
         run: |
-          echo "✅ Version: $VERSION"
-          echo "🚀 Jenkins triggered"
+          echo "✅ Final Version: $VERSION"
+          echo "🚀 Jenkins job 'subbu_app' triggered"
