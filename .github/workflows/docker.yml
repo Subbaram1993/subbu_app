@@ -100,27 +100,34 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "📦 Determined version: $VERSION"
 
-      # 5️⃣ Update JSON (preserve existing ngrok URL)
-      - name: Update version in JSON
+      # 5️⃣ Append version to JSON (preserve ngrok_url)
+      - name: Append version to JSON
         run: |
           set -euo pipefail
 
           mkdir -p .github/pages
 
+          # If file exists, read it; else start with empty array
           if [ -f "${JSON_PATH}" ]; then
-            EXISTING_URL=$(jq -r '.ngrok_url // ""' "${JSON_PATH}")
+            EXISTING_JSON=$(cat "${JSON_PATH}")
           else
-            EXISTING_URL=""
+            EXISTING_JSON="[]"
           fi
 
-          jq -n \
+          # Preserve ngrok_url from the latest entry if exists
+          EXISTING_URL=$(echo "$EXISTING_JSON" | jq -r '.[-1].ngrok_url // ""')
+
+          # Create new entry
+          NEW_ENTRY=$(jq -n \
             --arg version "$VERSION" \
             --arg ngrok_url "$EXISTING_URL" \
             --arg last_updated "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}' \
-            > "${JSON_PATH}"
+            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}')
 
-          echo "📝 JSON updated (version updated, ngrok URL preserved)"
+          # Append new entry to existing array
+          echo "$EXISTING_JSON" | jq ". + [${NEW_ENTRY}]" > "${JSON_PATH}"
+
+          echo "📝 JSON updated (new version appended)"
 
       # 6️⃣ Commit JSON back to GitHub
       - name: Commit JSON
@@ -135,7 +142,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "ℹ️ No changes to commit"
           else
-            git commit -m "Update version to ${VERSION} [skip ci]"
+            git commit -m "Append version ${VERSION} [skip ci]"
             git push
             echo "✅ JSON committed"
           fi
