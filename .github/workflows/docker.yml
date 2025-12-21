@@ -13,7 +13,7 @@ on:
 env:
   JENKINS_JOB_NAME: subbu_app
   JSON_PATH: .github/pages/ngrok_pages.json
-  MAX_WAIT_SECONDS: 100  # 1 minute 40 seconds
+  MAX_WAIT_SECONDS: 120  # 2 minutes
 
 jobs:
   trigger-and-version:
@@ -30,23 +30,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "🔐 Fetching Jenkins crumb..."
-          CRUMB=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-            "${{ secrets.JENKINS_URL }}/crumbIssuer/api/json" | jq -r '.crumb // empty')
-
-          if [ -z "$CRUMB" ]; then
-            echo "⚠️ Crumb not found (CSRF may be disabled), continuing without it"
-            CRUMB_HEADER=""
-          else
-            echo "✅ Jenkins crumb acquired"
-            CRUMB_HEADER="-H Jenkins-Crumb:$CRUMB"
-          fi
-
           echo "🚀 Triggering Jenkins job..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-            $CRUMB_HEADER \
-            "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build")
+            --user subbaramaiah_chevuru:1114faabfbe5e4af3e084d1710f9c1b5e0 \
+            "http://192.168.241.134:8081/job/${{ env.JENKINS_JOB_NAME }}/build")
 
           if [ "$STATUS" != "201" ]; then
             echo "❌ Jenkins trigger failed (HTTP $STATUS)"
@@ -62,8 +49,8 @@ jobs:
           SECONDS=0
           echo "⏳ Waiting for Jenkins build to start..."
           while true; do
-            BUILD_NUMBER=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-              "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/api/json" \
+            BUILD_NUMBER=$(curl -s -u subbaramaiah_chevuru:1114faabfbe5e4af3e084d1710f9c1b5e0 \
+              "http://192.168.241.134:8081/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/api/json" \
               | jq -r '.number')
             if [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
               break
@@ -80,8 +67,8 @@ jobs:
           echo "⏳ Waiting for build $BUILD_NUMBER to finish..."
           SECONDS=0
           while true; do
-            STATUS=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-              "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/$BUILD_NUMBER/api/json" \
+            STATUS=$(curl -s -u subbaramaiah_chevuru:1114faabfbe5e4af3e084d1710f9c1b5e0 \
+              "http://192.168.241.134:8081/job/${{ env.JENKINS_JOB_NAME }}/$BUILD_NUMBER/api/json" \
               | jq -r '.result')
             if [ "$STATUS" != "null" ]; then
               echo "✅ Build finished with status: $STATUS"
