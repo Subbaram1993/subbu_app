@@ -7,7 +7,7 @@ on:
 
 env:
   IMAGE_NAME: my-node-app
-  BUILD_JSON_PATH: .github/build_numbers/build_number.json
+  PAGES_JSON_PATH: .github/pages/ngrok_pages.json
   JENKINS_JOB_NAME: my-node-app-docker-ngrok
 
 jobs:
@@ -24,9 +24,9 @@ jobs:
         run: |
           mkdir -p .github/build_numbers
 
-          if [ ! -f "${BUILD_JSON_PATH}" ]; then
+          if [ ! -f "${PAGES_JSON_PATH}" ]; then
             echo "📄 build_number.json not found. Creating default..."
-            cat <<EOF > ${BUILD_JSON_PATH}
+            cat <<EOF > ${PAGES_JSON_PATH}
             {
              "version": "v0.1.0",
              "last_updated": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -34,7 +34,7 @@ jobs:
              EOF
           fi
 
-          VERSION=$(jq -r '.version' ${BUILD_JSON_PATH})
+          VERSION=$(jq -r '.version' ${PAGES_JSON_PATH})
 
           if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
             echo "❌ Version missing in build_number.json"
