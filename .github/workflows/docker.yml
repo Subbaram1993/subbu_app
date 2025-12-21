@@ -27,11 +27,11 @@ jobs:
           if [ ! -f "${PAGES_JSON_PATH}" ]; then
             echo "📄 ngrok_pages.json not found. Creating default..."
             cat <<EOF > ${PAGES_JSON_PATH}
-{
-  "version": "v0.1.0",
-  "last_updated": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-}
-EOF
+            {
+             "version": "v0.1.0",
+             "last_updated": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+             }
+             EOF
           fi
 
           VERSION=$(jq -r '.version' ${PAGES_JSON_PATH})
