@@ -42,7 +42,7 @@ jobs:
           echo "✅ Jenkins triggered successfully"
 
       # 3️⃣ Wait for Jenkins build to complete (sleep)
-      - name: Wait for Jenkins Build Completion
+      - name: Re-fetch Latest Jenkins Build Number & Status
         id: refetch-jenkins-build-number-status
         run: |
           set -euo pipefail
@@ -85,9 +85,15 @@ jobs:
 
           mkdir -p .github/pages
 
-          # If file exists, read it; else start with empty array
+          # Read existing JSON
           if [ -f "${JSON_PATH}" ]; then
             EXISTING_JSON=$(cat "${JSON_PATH}")
+
+            # Convert object to array if needed
+            IS_ARRAY=$(echo "$EXISTING_JSON" | jq 'if type=="array" then true else false end')
+            if [ "$IS_ARRAY" != "true" ]; then
+              EXISTING_JSON="[$EXISTING_JSON]"
+            fi
           else
             EXISTING_JSON="[]"
           fi
@@ -100,7 +106,8 @@ jobs:
             --arg version "$VERSION" \
             --arg ngrok_url "$EXISTING_URL" \
             --arg last_updated "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}')
+            --arg status "$BUILD_STATUS" \
+            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated, status: $status}')
 
           # Append new entry to existing array
           echo "$EXISTING_JSON" | jq ". + [${NEW_ENTRY}]" > "${JSON_PATH}"
