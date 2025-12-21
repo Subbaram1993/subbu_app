@@ -13,6 +13,7 @@ on:
 env:
   JENKINS_JOB_NAME: subbu_app
   JSON_PATH: .github/pages/ngrok_pages.json
+  MAX_WAIT_SECONDS: 100  # 1 minute 40 seconds
 
 jobs:
   trigger-and-version:
@@ -53,11 +54,12 @@ jobs:
           fi
           echo "✅ Jenkins triggered successfully"
 
-      # 3️⃣ Wait for Jenkins build completion and get build number
+      # 3️⃣ Wait for Jenkins build completion with timeout
       - name: Wait for Jenkins Build Completion
         run: |
           set -euo pipefail
 
+          SECONDS=0
           echo "⏳ Waiting for Jenkins build to start..."
           while true; do
             BUILD_NUMBER=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
@@ -66,13 +68,17 @@ jobs:
             if [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
               break
             fi
-            echo "Waiting for build number..."
+            if [ "$SECONDS" -ge "${{ env.MAX_WAIT_SECONDS }}" ]; then
+              echo "❌ Timeout waiting for build number"
+              exit 1
+            fi
             sleep 2
           done
           echo "🔢 Jenkins build number: $BUILD_NUMBER"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
           echo "⏳ Waiting for build $BUILD_NUMBER to finish..."
+          SECONDS=0
           while true; do
             STATUS=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
               "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/$BUILD_NUMBER/api/json" \
@@ -84,6 +90,10 @@ jobs:
                 exit 1
               fi
               break
+            fi
+            if [ "$SECONDS" -ge "${{ env.MAX_WAIT_SECONDS }}" ]; then
+              echo "❌ Timeout waiting for build completion"
+              exit 1
             fi
             echo "Build is still running..."
             sleep 5
