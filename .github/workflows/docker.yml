@@ -15,67 +15,93 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
+      # 1️⃣ Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Ensure ngrok_pages.json exists & read version
-      - name: Create or Read ngrok_pages.json
+      # 2️⃣ Get Jenkins Build Number
+      - name: Get Latest Jenkins Build Number
         run: |
           set -e
 
-          mkdir -p .github/pages
+          BUILD_NUMBER=$(curl -s \
+            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+            "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastSuccessfulBuild/api/json" \
+            | jq -r '.number')
 
-          if [ ! -f "${PAGES_JSON_PATH}" ]; then
-            echo "📄 ngrok_pages.json not found. Creating default..."
-
-            jq -n \
-              --arg version "v0.1.0" \
-              --arg last_updated "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-              '{version: $version, last_updated: $last_updated}' \
-              > "${PAGES_JSON_PATH}"
-          fi
-
-          VERSION=$(jq -r '.version' "${PAGES_JSON_PATH}")
-
-          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
-            echo "❌ Version missing in ngrok_pages.json"
+          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "❌ Invalid Jenkins build number"
             exit 1
           fi
 
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "📦 Using version: $VERSION"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "✅ Jenkins Build Number: $BUILD_NUMBER"
 
-      # 3️⃣ Login to Docker Hub
+      # 3️⃣ Determine Version
+      - name: Determine Version
+        run: |
+          set -e
+
+          PATCH=$((BUILD_NUMBER % 10))
+          MINOR=$(( (BUILD_NUMBER / 10) % 6 ))
+          MAJOR=$(( BUILD_NUMBER / 60 ))
+
+          VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "📦 Version: $VERSION"
+
+      # 4️⃣ Save version to JSON
+      - name: Save Version to ngrok_pages.json
+        run: |
+          set -e
+          mkdir -p .github/pages
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg last_updated "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            '{version: $version, last_updated: $last_updated}' \
+            > "${PAGES_JSON_PATH}"
+
+      # 5️⃣ Commit version (skip CI)
+      - name: Commit Version
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git add "${PAGES_JSON_PATH}"
+          git commit -m "Version updated to ${VERSION} [skip ci]"
+          git push
+
+      # 6️⃣ Docker Login
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 4️⃣ Build Docker image (versioned + latest)
+      # 7️⃣ Build Docker Image
       - name: Build Docker Image
         run: |
           docker build \
             -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} \
             -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
 
-      # 5️⃣ Push Docker images
+      # 8️⃣ Push Docker Images
       - name: Push Docker Images
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
-      # 6️⃣ Trigger Jenkins job
+      # 9️⃣ Trigger Jenkins
       - name: Trigger Jenkins Job
         run: |
           curl -X POST \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
             "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build"
 
-      # 7️⃣ Finish
+      # 🔟 Finish
       - name: Finish
         run: |
-          echo "✅ Docker image pushed"
-          echo "🚀 Jenkins job 'subbu_app' triggered"
-          echo "🧠 GitHub Actions finished"
+          echo "✅ Version: $VERSION"
+          echo "🚀 Jenkins triggered"
