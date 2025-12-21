@@ -1,15 +1,19 @@
 name: Docker Build & Trigger Jenkins (Persistent Runtime)
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - ".github/pages/ngrok_pages.json"
 
 env:
   IMAGE_NAME: my-node-app
   PAGES_JSON_PATH: .github/pages/ngrok_pages.json
   JENKINS_JOB_NAME: subbu_app
-  NGROK_URL: https://8ac9dbe6fad4.ngrok-free.app
 
 jobs:
   build-and-trigger:
@@ -22,14 +26,14 @@ jobs:
       - name: Get Jenkins Build Number
         run: |
           set -euo pipefail
-          echo "🔍 Fetching last build number..."
+          echo "🔍 Fetching last Jenkins build number..."
 
           BUILD_NUMBER=$(curl -s --connect-timeout 10 --max-time 15 \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
             "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/buildNumber" || true)
 
           if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "⚠️ Jenkins build number not available, using 0"
+            echo "⚠️ Jenkins build number unavailable, defaulting to 0"
             BUILD_NUMBER=0
           fi
 
@@ -47,39 +51,56 @@ jobs:
           VERSION="v${MAJOR}.${MINOR}.${PATCH}"
 
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "📦 Determined Version: $VERSION"
+          echo "📦 Version determined: $VERSION"
 
-      - name: Save initial JSON
+      - name: Fetch ngrok URL from Jenkins
+        run: |
+          set -euo pipefail
+          echo "🌐 Fetching ngrok URL from Jenkins..."
+
+          NGROK_URL=$(curl -s --connect-timeout 10 --max-time 15 \
+            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+            "${{ secrets.JENKINS_URL }}/ngrok-url" | jq -r '.url')
+
+          if [[ -z "$NGROK_URL" || "$NGROK_URL" == "null" ]]; then
+            echo "❌ Failed to retrieve ngrok URL"
+            exit 1
+          fi
+
+          echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
+          echo "✅ ngrok URL: $NGROK_URL"
+
+      - name: Save ngrok JSON for Pages
         run: |
           set -euo pipefail
 
           mkdir -p .github/pages
           LAST_UPDATED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          JSON_CONTENT=$(jq -n \
+          jq -n \
             --arg version "$VERSION" \
             --arg ngrok_url "$NGROK_URL" \
             --arg last_updated "$LAST_UPDATED" \
-            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}')
+            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}' \
+            > "${PAGES_JSON_PATH}"
 
-          echo "$JSON_CONTENT" > "${PAGES_JSON_PATH}"
-          echo "📝 ngrok_pages.json initialized"
+          echo "📝 ngrok_pages.json updated"
 
-      - name: Commit Version
+      - name: Commit ngrok JSON
         run: |
           set -euo pipefail
 
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ secrets.GIT_EMAIL }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add "${PAGES_JSON_PATH}"
 
           if git diff --cached --quiet; then
             echo "ℹ️ No changes to commit"
           else
-            git commit -m "Version initialized to ${VERSION} [skip ci]"
+            git commit -m "Update ngrok URL (${VERSION}) [skip ci]"
             git push
-            echo "✅ Version committed"
+            echo "✅ JSON committed"
           fi
 
       - name: Docker Login
@@ -116,7 +137,6 @@ jobs:
       - name: Finish
         run: |
           set -euo pipefail
-
           echo "🚀 Deployment completed successfully"
           echo "Version: ${VERSION}"
           echo "ngrok URL: ${NGROK_URL}"
