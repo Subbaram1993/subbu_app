@@ -1,71 +1,79 @@
-name: Docker Build, Push & Run with Ngrok (3 Hours)
+name: Docker Build & Trigger Jenkins (Persistent Runtime)
 
 on:
   push:
     branches:
       - main
 
+env:
+  IMAGE_NAME: my-node-app
+  BUILD_JSON_PATH: .github/build_numbers/build_number.json
+  JENKINS_JOB_NAME: my-node-app-docker-ngrok
+
 jobs:
-  build-and-run:
+  build-and-trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 180   # ⏱️ 3 hours max
 
     steps:
       # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Login to Docker Hub
+      # 2️⃣ Ensure build_number.json exists & read version
+      - name: Create or Read Build JSON
+        run: |
+          mkdir -p .github/build_numbers
+
+          if [ ! -f "${BUILD_JSON_PATH}" ]; then
+            echo "📄 build_number.json not found. Creating default..."
+            cat <<EOF > ${BUILD_JSON_PATH}
+{
+  "version": "v0.1.0",
+  "last_updated": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+          fi
+
+          VERSION=$(jq -r '.version' ${BUILD_JSON_PATH})
+
+          if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+            echo "❌ Version missing in build_number.json"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "📦 Using version: $VERSION"
+
+      # 3️⃣ Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 3️⃣ Build Docker image
-      - name: Build Docker image
+      # 4️⃣ Build Docker image (versioned)
+      - name: Build Docker Image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest .
+          docker build \
+            -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} \
+            -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
 
-      # 4️⃣ Push Docker image
-      - name: Push Docker image
+      # 5️⃣ Push Docker images
+      - name: Push Docker Images
         run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
-      # 5️⃣ Run Docker container
-      - name: Run Docker container
+      # 6️⃣ Trigger Jenkins job
+      - name: Trigger Jenkins Job
         run: |
-          docker run -d --name my-node-app -p 3000:3000 \
-            ${{ secrets.DOCKER_USERNAME }}/my-node-app:latest
+          curl -X POST \
+            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+            "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build"
 
-      # 6️⃣ Install ngrok
-      - name: Install ngrok
+      # 7️⃣ Finish
+      - name: Finish
         run: |
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update
-          sudo apt install ngrok -y
-          sudo apt install jq -y
-
-      # 7️⃣ Start ngrok tunnel
-      - name: Start ngrok tunnel
-        run: |
-          ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          ngrok http 3000 --log=stdout &
-          sleep 5
-          echo "Public ngrok URL:"
-          curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
-
-      # 8️⃣ Show logs and keep alive for 3 hours
-      - name: Run for 3 hours
-        run: |
-          docker logs -f my-node-app &
-          echo "⏳ Running for 3 hours..."
-          sleep 10800   # 3 hours
-
-      # 9️⃣ Cleanup (always runs)
-      - name: Cleanup container
-        if: always()
-        run: |
-          docker stop my-node-app || true
-          docker rm my-node-app || true
+          echo "✅ Docker image pushed"
+          echo "🚀 Jenkins job triggered"
+          echo "🧠 GitHub Actions finished"
