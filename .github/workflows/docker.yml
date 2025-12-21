@@ -1,4 +1,4 @@
-name: Docker Build & Trigger Jenkins
+name: Update JSON with Jenkins Version
 
 permissions:
   contents: write
@@ -16,7 +16,7 @@ env:
   MAX_WAIT_SECONDS: 120  # 2 minutes
 
 jobs:
-  trigger-and-version:
+  update-json-version:
     runs-on: self-hosted
 
     steps:
@@ -86,7 +86,7 @@ jobs:
             sleep 5
           done
 
-      # 4️⃣ Determine version
+      # 4️⃣ Determine version for JSON only
       - name: Determine Version
         run: |
           set -euo pipefail
@@ -142,7 +142,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "ℹ️ No changes to commit"
           else
-            git commit -m "Append version ${VERSION} [skip ci]"
+            git commit -m "Append version ${VERSION} to JSON [skip ci]"
             git push
             echo "✅ JSON committed"
           fi
