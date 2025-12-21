@@ -19,7 +19,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Get Jenkins Build Number (fast, with fallback)
+      # 2️⃣ Get Jenkins Build Number (fast, fallback to 0)
       - name: Get Jenkins Build Number
         run: |
           set -e
@@ -51,10 +51,7 @@ jobs:
           set -e
           mkdir -p .github/pages
           NGROK_URL="https://8ac9dbe6fad4.ngrok-free.app"
-          jq -n \
-            --arg version "$VERSION" \
-            --arg ngrok_url "$NGROK_URL" \
-            --arg last_updated "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+          jq -n --arg version "$VERSION" --arg ngrok_url "$NGROK_URL" --arg last_updated "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
             '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}' \
             > "${PAGES_JSON_PATH}"
           echo "📝 ngrok_pages.json initialized"
@@ -83,9 +80,8 @@ jobs:
       # 7️⃣ Build Docker Image
       - name: Build Docker Image
         run: |
-          docker build \
-            -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} \
-            -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} \
+                       -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
 
       # 8️⃣ Push Docker Images
       - name: Push Docker Images
@@ -101,7 +97,7 @@ jobs:
             "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build"
           echo "✅ Jenkins job triggered"
 
-      # 🔟 Wait & Fetch ngrok URL from Jenkins (fast polling)
+      # 🔟 Wait & Fetch ngrok URL from Jenkins (polling)
       - name: Fetch ngrok URL from Jenkins
         run: |
           set -e
@@ -126,10 +122,7 @@ jobs:
       - name: Update ngrok_pages.json with real URL
         run: |
           set -e
-          jq -n \
-            --arg version "$VERSION" \
-            --arg ngrok_url "$NGROK_URL" \
-            --arg last_updated "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+          jq -n --arg version "$VERSION" --arg ngrok_url "$NGROK_URL" --arg last_updated "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
             '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}' \
             > "${PAGES_JSON_PATH}"
           git config user.name "${{ github.actor }}"
