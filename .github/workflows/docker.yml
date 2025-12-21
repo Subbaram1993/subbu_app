@@ -15,11 +15,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Get Jenkins Build Number (fast, fallback to 0)
       - name: Get Jenkins Build Number
         run: |
           set -e
@@ -34,7 +32,6 @@ jobs:
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
           echo "✅ Jenkins Build Number: $BUILD_NUMBER"
 
-      # 3️⃣ Determine Version
       - name: Determine Version
         run: |
           set -e
@@ -45,18 +42,20 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "📦 Determined Version: $VERSION"
 
-      # 4️⃣ Save initial JSON (placeholder ngrok URL)
       - name: Save initial JSON
         run: |
           set -e
           mkdir -p .github/pages
           NGROK_URL="https://8ac9dbe6fad4.ngrok-free.app"
-          jq -n --arg version "$VERSION" --arg ngrok_url "$NGROK_URL" --arg last_updated "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}' \
-            > "${PAGES_JSON_PATH}"
+          LAST_UPDATED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          JSON_CONTENT=$(jq -n \
+            --arg version "$VERSION" \
+            --arg ngrok_url "$NGROK_URL" \
+            --arg last_updated "$LAST_UPDATED" \
+            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}')
+          echo "$JSON_CONTENT" > "${PAGES_JSON_PATH}"
           echo "📝 ngrok_pages.json initialized"
 
-      # 5️⃣ Commit JSON if changed
       - name: Commit Version
         run: |
           set -e
@@ -70,26 +69,22 @@ jobs:
             git push
             echo "✅ Version committed"
 
-      # 6️⃣ Docker Login
-      - name: Login to Docker Hub
+      - name: Docker Login
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 7️⃣ Build Docker Image
       - name: Build Docker Image
         run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} \
                        -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
 
-      # 8️⃣ Push Docker Images
       - name: Push Docker Images
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
-      # 9️⃣ Trigger Jenkins Job
       - name: Trigger Jenkins Job
         run: |
           curl -X POST \
@@ -97,45 +92,6 @@ jobs:
             "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build"
           echo "✅ Jenkins job triggered"
 
-      # 🔟 Wait & Fetch ngrok URL from Jenkins (polling)
-      - name: Fetch ngrok URL from Jenkins
-        run: |
-          set -e
-          echo "⏳ Waiting for Jenkins to deploy and start ngrok..."
-          for i in {1..10}; do
-            sleep 3
-            TUNNELS_JSON=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-              "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/artifact/.github/pages/ngrok_pages.json" || true)
-            NGROK_URL=$(echo "$TUNNELS_JSON" | jq -r '.ngrok_url // empty')
-            if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
-              break
-            fi
-          done
-          if [ -z "$NGROK_URL" ] || [ "$NGROK_URL" = "null" ]; then
-            echo "⚠️ Failed to fetch ngrok URL from Jenkins"
-            exit 1
-          fi
-          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
-          echo "✅ ngrok URL fetched: $NGROK_URL"
-
-      # 1️⃣1️⃣ Update JSON with real ngrok URL
-      - name: Update ngrok_pages.json with real URL
-        run: |
-          set -e
-          jq -n --arg version "$VERSION" --arg ngrok_url "$NGROK_URL" --arg last_updated "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-            '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated}' \
-            > "${PAGES_JSON_PATH}"
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ secrets.GIT_EMAIL }}"
-          git add "${PAGES_JSON_PATH}"
-          if git diff --cached --quiet; then
-            echo "ℹ️ No changes to commit"
-          else
-            git commit -m "Update ngrok URL ($VERSION) [skip ci]"
-            git push
-            echo "✅ Updated ngrok URL committed"
-
-      # 1️⃣2️⃣ Finish
       - name: Finish
         run: |
           echo "🚀 Deployment completed successfully"
