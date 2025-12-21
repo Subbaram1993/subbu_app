@@ -13,7 +13,7 @@ on:
 env:
   JENKINS_JOB_NAME: subbu_app
   JSON_PATH: .github/pages/ngrok_pages.json
-  WAIT_SECONDS: 100  # Waiting time for Jenkins build completion
+  WAIT_SECONDS: 120  # Waiting time for Jenkins build completion
 
 jobs:
   update-json-version:
@@ -130,3 +130,4 @@ jobs:
             git commit -m "Append version ${VERSION} to JSON [skip ci]"
             git push
             echo "✅ JSON committed"
+          fi
