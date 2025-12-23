@@ -13,7 +13,7 @@ on:
 env:
   JENKINS_JOB_NAME: subbu_app
   JSON_PATH: .github/pages/ngrok_pages.json
-  WAIT_SECONDS: 300  # Waiting time is 5min for Jenkins build completion
+  WAIT_SECONDS: 180  # Waiting time is 5min for Jenkins build completion
 
 jobs:
   update-json-version:
@@ -123,7 +123,7 @@ jobs:
           git config user.email "${{ secrets.GIT_EMAIL }}"
           
           git fetch origin main
-          git rebase origin/main
+          git reset --hard origin/main
           
           git add "${JSON_PATH}"
 
