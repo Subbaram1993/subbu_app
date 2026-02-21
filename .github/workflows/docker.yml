@@ -13,7 +13,8 @@ on:
 env:
   JENKINS_JOB_NAME: subbu_app
   JSON_PATH: .github/pages/ngrok_pages.json
-  WAIT_SECONDS: 180  # Waiting time is 5min for Jenkins build completion
+  POLL_INTERVAL: 10
+  MAX_WAIT_TIME: 300   # 5 minutes
 
 jobs:
   update-json-version:
@@ -26,45 +27,66 @@ jobs:
 
       # 2️⃣ Trigger Jenkins Job
       - name: Trigger Jenkins Job
-        id: trigger_jenkins
         run: |
           set -euo pipefail
 
           echo "🚀 Triggering Jenkins job..."
+
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-           --user "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-           "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build")
+            --user "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+            "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/build")
 
           if [ "$STATUS" != "201" ]; then
             echo "❌ Jenkins trigger failed (HTTP $STATUS)"
             exit 1
           fi
+
           echo "✅ Jenkins triggered successfully"
 
-      # 3️⃣ Wait for Jenkins build to complete (sleep)
-      - name: Re-fetch Latest Jenkins Build Number & Status
-        id: refetch-jenkins-build-number-status
+      # 3️⃣ Poll Jenkins Until Build Completes
+      - name: Wait for Jenkins Build Completion
         run: |
           set -euo pipefail
 
-          echo "⏳ Sleeping $WAIT_SECONDS seconds to wait for Jenkins build completion..."
-          sleep $WAIT_SECONDS
+          echo "⏳ Waiting for Jenkins build to complete..."
 
-          # Fetch the latest build number
-          LATEST_BUILD_NUMBER=$(curl -s -u subbaramaiah_chevuru:1114faabfbe5e4af3e084d1710f9c1b5e0 \
-            "http://192.168.241.134:8081/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/api/json?tree=number" \
-            | jq -r '.number')
+          ELAPSED=0
 
-          # Fetch the build status
-          BUILD_STATUS=$(curl -s -u subbaramaiah_chevuru:1114faabfbe5e4af3e084d1710f9c1b5e0 \
-            "http://192.168.241.134:8081/job/${{ env.JENKINS_JOB_NAME }}/$LATEST_BUILD_NUMBER/api/json?tree=result" \
-            | jq -r '.result')
+          while true; do
+            RESPONSE=$(curl -s \
+              -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+              "${{ secrets.JENKINS_URL }}/job/${{ env.JENKINS_JOB_NAME }}/lastBuild/api/json")
 
-          echo "LATEST_BUILD_NUMBER=${LATEST_BUILD_NUMBER}" >> $GITHUB_ENV
-          echo "BUILD_STATUS=${BUILD_STATUS}" >> $GITHUB_ENV
-          echo "Build completed with status: $BUILD_STATUS"
+            BUILDING=$(echo "$RESPONSE" | jq -r '.building')
+            BUILD_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
+            BUILD_STATUS=$(echo "$RESPONSE" | jq -r '.result')
 
-      # 4️⃣ Determine version for JSON only
+            echo "🔄 Build #$BUILD_NUMBER | building=$BUILDING | result=$BUILD_STATUS"
+
+            if [ "$BUILDING" = "false" ]; then
+              break
+            fi
+
+            if [ "$ELAPSED" -ge "$MAX_WAIT_TIME" ]; then
+              echo "❌ Timeout waiting for Jenkins build"
+              exit 1
+            fi
+
+            sleep "$POLL_INTERVAL"
+            ELAPSED=$((ELAPSED + POLL_INTERVAL))
+          done
+
+          echo "LATEST_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "BUILD_STATUS=$BUILD_STATUS" >> "$GITHUB_ENV"
+
+          if [ "$BUILD_STATUS" != "SUCCESS" ]; then
+            echo "❌ Jenkins build failed"
+            exit 1
+          fi
+
+          echo "✅ Jenkins build completed successfully"
+
+      # 4️⃣ Determine Version
       - name: Determine Version
         run: |
           set -euo pipefail
@@ -78,18 +100,16 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "📦 Determined version: $VERSION"
 
-      # 5️⃣ Append version to JSON (preserve ngrok_url)
+      # 5️⃣ Append Version to JSON
       - name: Append version to JSON
         run: |
           set -euo pipefail
 
           mkdir -p .github/pages
 
-          # Read existing JSON
           if [ -f "${JSON_PATH}" ]; then
             EXISTING_JSON=$(cat "${JSON_PATH}")
 
-            # Convert object to array if needed
             IS_ARRAY=$(echo "$EXISTING_JSON" | jq 'if type=="array" then true else false end')
             if [ "$IS_ARRAY" != "true" ]; then
               EXISTING_JSON="[$EXISTING_JSON]"
@@ -98,10 +118,8 @@ jobs:
             EXISTING_JSON="[]"
           fi
 
-          # Preserve ngrok_url from the latest entry if exists
           EXISTING_URL=$(echo "$EXISTING_JSON" | jq -r '.[-1].ngrok_url // ""')
 
-          # Create new entry
           NEW_ENTRY=$(jq -n \
             --arg version "$VERSION" \
             --arg ngrok_url "$EXISTING_URL" \
@@ -109,22 +127,21 @@ jobs:
             --arg status "$BUILD_STATUS" \
             '{version: $version, ngrok_url: $ngrok_url, last_updated: $last_updated, status: $status}')
 
-          # Append new entry to existing array
           echo "$EXISTING_JSON" | jq ". + [${NEW_ENTRY}]" > "${JSON_PATH}"
 
-          echo "📝 JSON updated (new version appended)"
+          echo "📝 JSON updated"
 
-      # 6️⃣ Commit JSON back to GitHub
+      # 6️⃣ Commit JSON
       - name: Commit JSON
         run: |
           set -euo pipefail
 
           git config user.name "${{ github.actor }}"
           git config user.email "${{ secrets.GIT_EMAIL }}"
-          
+
           git fetch origin main
           git reset --hard origin/main
-          
+
           git add "${JSON_PATH}"
 
           if git diff --cached --quiet; then
